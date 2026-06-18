@@ -1,0 +1,42 @@
+# ==========================================================================
+# THIS FILE IS AUTO-GENERATED -- DO NOT EDIT BY HAND.
+# Source of truth: the reusable workflows in .github/workflows/
+# Regenerate with:  python3 .github/scripts/generate-pipeline.py
+#
+# Execution order (decided by file-name prefix; see the checker):
+#   1. lint         -> lint.yml
+#   2. test         -> test.yml
+#   3. build        -> build.yml
+#   4. deploy       -> deploy.yml
+# ==========================================================================
+name: Main Pipeline
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: main-pipeline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: "lint: lint.yml"
+    uses: ./.github/workflows/lint.yml
+
+  test:
+    name: "test: test.yml"
+    needs: [lint]
+    uses: ./.github/workflows/test.yml
+
+  build:
+    name: "build: build.yml"
+    needs: [test]
+    uses: ./.github/workflows/build.yml
+
+  deploy:
+    name: "deploy: deploy.yml"
+    needs: [build]
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

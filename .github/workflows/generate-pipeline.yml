@@ -1,0 +1,72 @@
+# Keeps .github/workflows/main.yml in sync with the reusable workflows present
+# in the folder. This is what makes the Main Pipeline "dynamic": add or remove
+# a *.yml reusable workflow and the orchestrating main.yml is regenerated for
+# you (committed on the default branch, enforced on PRs / feature branches).
+#
+# Loop safety: the triggers below deliberately EXCLUDE main.yml, so the commit
+# this workflow makes (which only touches main.yml) does not re-trigger it.
+name: Generate Main Pipeline
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - '.github/scripts/generate-pipeline.py'
+      - '!.github/workflows/main.yml'
+      - '!.github/workflows/generate-pipeline.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/scripts/generate-pipeline.py'
+      - '!.github/workflows/main.yml'
+      - '!.github/workflows/generate-pipeline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-main-pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so the pre-push rebase can fast-forward
+
+      # Default branch (push or manual run): regenerate and commit the result
+      # back, so dropping a new pipeline file in is genuinely zero-touch.
+      - name: Regenerate and commit
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_name == github.event.repository.default_branch
+        run: |
+          python3 .github/scripts/generate-pipeline.py
+          if [ -z "$(git status --porcelain .github/workflows/main.yml)" ]; then
+            echo "main.yml already up to date."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/main.yml
+          git commit -m "chore: regenerate Main Pipeline [auto]"
+          # Rebase + retry to survive a concurrent push (non-fast-forward).
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin "$GITHUB_REF_NAME" || true
+            if git push origin "HEAD:$GITHUB_REF_NAME"; then
+              echo "Pushed regenerated main.yml."
+              exit 0
+            fi
+            echo "push attempt $attempt failed; retrying..."
+          done
+          # Protected branch / push rejected: don't fail the run -- the PR --check
+          # gate (below) keeps things honest; just tell the maintainer.
+          echo "::warning::Could not push main.yml (branch protected or push rejected). Run 'python3 .github/scripts/generate-pipeline.py' locally and commit it."
+
+      # PRs, feature branches, and manual runs off the default branch: don't
+      # commit (and forks can't) -- just fail if main.yml is stale, telling the
+      # author to run the generator locally.
+      - name: Verify main.yml is up to date
+        if: github.event_name == 'pull_request' || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_name != github.event.repository.default_branch)
+        run: python3 .github/scripts/generate-pipeline.py --check
