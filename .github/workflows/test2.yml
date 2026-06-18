@@ -1,0 +1,14 @@
+# Reusable workflow. Picked up by the "test" stage (file-name prefix "test").
+name: Test
+
+on:
+  workflow_call:
+
+jobs:
+  test2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: |
+          echo "TODO: run your test suite (pytest, jest, go test, ...)"
