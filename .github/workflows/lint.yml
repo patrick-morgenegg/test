@@ -1,0 +1,15 @@
+# Reusable workflow. Picked up by the "lint" stage (file-name prefix "lint").
+# To change its position, add e.g. `# pipeline-stage: test` near the top.
+name: Lint
+
+on:
+  workflow_call:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run linters
+        run: |
+          echo "TODO: run your linters (eslint, ruff, golangci-lint, ...)"
